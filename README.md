@@ -4,3 +4,5 @@
 (при первом касании Safari спросит «Разрешить доступ к движению и ориентации»).
 
 Страница: https://cgvlady.github.io/Beta/
+
+Луг (промежуточная v15d, 19 нояб.): https://cgvlady.github.io/Beta/grassland/
