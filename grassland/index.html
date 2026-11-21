@@ -5404,11 +5404,14 @@ void main() {
     gl_FragColor = vec4(s / 8.0, 1.0);
   } else {
     if (e < 0.004) { gl_FragColor = vec4(texture2D(tS, vUv).rgb, 1.0); return; }
-    float an = atan(d.y, d.x), ph = 0.24 * sin(uTime * 0.5 + r * 4.0 + an * 2.0), sp = 0.75 * clamp(uLens.w * 40.0, 0.0, 1.0) * smoothstep(0.0, 0.5, e);   // (22 Nov: the colours drift more — «переливалась»)
-    vec3 s = vec3(0.0), ws = vec3(0.0);
+    float an = atan(d.y, d.x), ph = 0.24 * sin(uTime * 0.5 + r * 4.0 + an * 2.0), sp = 0.75 * clamp(uLens.w * 40.0, 0.0, 1.0) * smoothstep(0.0, 0.75, sqrt(e / max(uLens.x, 1e-3)));   // (22 Nov: the colours drift more — «переливалась»)
+    // (22 Nov, the owner on edolus: «перелив не такой… в самой линзе») there the colours are not one soft rainbow but thin interference bands, several
+    // along each smear, with a fine grain (a glitch's look, but glass): the spectrum runs ~2.5 times along the streak, its phase drifting, and the reads
+    // are jittered per pixel by up to half a step (the grain)
+    vec3 s = vec3(0.0), ws = vec3(0.0); float jg = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) - 0.5;
     for (int i = 0; i < 8; i++) {
-      float t = float(i) / 8.0; vec3 w = mix(vec3(1.0), lspecS(clamp(t + 0.0625 + ph, 0.0, 1.0)) * 2.0, sp);
-      s += texture2D(tS, 0.5 + d * (1.0 - Lf * t)).rgb * w; ws += w;
+      float t = (float(i) + 0.25 * jg) / 8.0; vec3 w = mix(vec3(1.0), lspecS(fract(t * 2.5 + 0.0625 + ph + 0.04 * jg)) * 2.0, sp);   // (the owner: «глич… меньше» — the grain halved)
+      s += texture2D(tS, 0.5 + d * (1.0 - Lf * max(t, 0.0))).rgb * w; ws += w;
     }
     gl_FragColor = vec4(s / ws, 1.0);
   }
@@ -5533,7 +5536,7 @@ vec3 lensAt(vec2 uv, vec3 c0) {   // (uv: the screen point — the drops on the 
   // the corners (r ≈ 1.41) strongest. (the owner: «линза выразительная, переход плавнее намного») it begins far in and eases in by its square
   vec2 d = uv - 0.5, q = abs(d) * 2.0; float r = length(q);
   float e = lensE(d);
-  if (e < 0.004) return c0;
+  if (e < 0.0004) return c0;
   // (22 Nov, the owner: «линза… даже не даёт этой глубины… как на тех версиях, первых, вторых… углубление… всё внутрь») the depth of the first
   // versions was the STREAK: every rim pixel gathers the picture along its ray toward the centre (as if the frame rushed into the glass), its length
   // growing to the edge (≈ 115 px at a desktop corner). Those versions read the SHARP frame 12 times along it — 10 px apart at the corners, so every
@@ -5543,18 +5546,18 @@ vec3 lensAt(vec2 uv, vec3 c0) {   // (uv: the screen point — the drops on the 
   float an = atan(d.y, d.x), br = 1.0 + 0.35 * sin(uTime * 0.4 + an * 2.0 + r * 3.0);
   float Lf = lensL(d);   // the streak, as a fraction of the way to the centre
   float Lpx = Lf * length(d * uRes);   // … and in pixels
-  float sp = clamp(uLens.w * 40.0, 0.0, 1.0) * smoothstep(0.0, 0.5, e), ph = 0.24 * sin(uTime * 0.5 + r * 4.0 + an * 2.0);
+  float sp = clamp(uLens.w * 40.0, 0.0, 1.0) * smoothstep(0.0, 0.75, sqrt(e / max(uLens.x, 1e-3))), ph = 0.24 * sin(uTime * 0.5 + r * 4.0 + an * 2.0);
   float wB = smoothstep(3.0, 30.0, Lpx);   // (22 Nov: the sharp streak hands over to the half-resolution one over a longer way — no step in sharpness seen)
   vec3 stA = vec3(0.0);
   if (wB < 0.999) { vec3 sA = vec3(0.0), wA = vec3(0.0);
     for (int i = 0; i < 8; i++) {
-      float t = (float(i) + 0.5) / 8.0; vec3 w = mix(vec3(1.0), lspec(clamp(t + ph, 0.0, 1.0)) * 2.0, sp);
+      float t = (float(i) + 0.5) / 8.0; vec3 w = mix(vec3(1.0), lspec(fract(t * 2.5 + ph)) * 2.0, sp);
       sA += texRT(tA, 0.5 + d * (1.0 - Lf * t)).rgb * w; wA += w;
     }
     stA = sA / wA; }
   vec3 st = wB > 0.001 ? mix(stA, texture2D(tStreak, uv).rgb, wB) : stA;
   // the sharp loupe read beneath (its fringe ≤ ~1.5 px): the rim's first part stays crisp while the streak takes over outward
-  vec2 p0 = 0.5 + d * (1.0 - Lf * 0.5), px = d / max(length(d), 1e-4) * e * br * 0.75 / uRes;
+  vec2 p0 = 0.5 + d * (1.0 - Lf * 0.5), px = d / max(length(d), 1e-4) * (0.35 + 1.6 * e) * sqrt(e / max(uLens.x, 1e-3)) * br / uRes;   // (22 Nov, the owner: «как одна единая сцена… перелив в саму середину»: the fringe from near the middle, unsquared rise)
   vec3 cl = vec3(texRT(tA, p0 - px).r, texRT(tA, p0).g, texRT(tA, p0 + px).b);
   vec3 res = mix(c0, mix(cl, st, smoothstep(0.0, 0.45, e) * 0.92), smoothstep(0.0, 0.12, e)) * (1.0 - 0.15 * e);   // (and a breath of shade at the rim: the glass's depth)
   // (22 Nov, the owner: «стеклянность добавь… переливалась… и вверху тоже… перетекало в сцену») the glass catches the light: two soft straight bands
