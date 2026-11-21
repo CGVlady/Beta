@@ -5,4 +5,6 @@
 
 Страница: https://cgvlady.github.io/Beta/
 
-Луг (промежуточная v15d, 19 нояб.): https://cgvlady.github.io/Beta/grassland/
+Луг — бета (v19k, 21 нояб.): https://cgvlady.github.io/Beta/grassland/
+
+Луг — основная (v19k, 21 нояб.): https://cgvlady.github.io/Beta/grassland-main/
