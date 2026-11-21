@@ -5463,8 +5463,17 @@ vec3 lensEdge(vec3 c0) {
   // (the owner: «должен эффект линзы создаваться, не просто размытие… как будто углубление») 1) the lens itself: the sharp picture drawn outward as through a
   // loupe — ONE read per channel at a magnified place (no taps, so no copies, no ripple), the channels at slightly different magnifications: a clean
   // fringe, its strength breathing slowly with time and the angle (iridescent); 2) at the very rim a smooth smear over the blurred quarter copy of the frame
-  float an = atan(d.y, d.x), ca = e * uLens.w * 1.6 * (1.0 + 0.35 * sin(uTime * 0.4 + an * 2.0 + r * 3.0)), k = 1.0 - e * uLens.z * 0.95;   // (the owner: «углубление чуть-чуть усилить»: 0.75 → 0.95)
-  vec3 cl = vec3(texRT(tA, 0.5 + d * k * (1.0 - ca)).r, texRT(tA, 0.5 + d * k).g, texRT(tA, 0.5 + d * k * (1.0 + ca)).b);
+  float an = atan(d.y, d.x), br = 1.0 + 0.35 * sin(uTime * 0.4 + an * 2.0 + r * 3.0), ca = e * uLens.w * 1.6 * br, k = 1.0 - e * uLens.z * 0.95;   // (the owner: «углубление чуть-чуть усилить»: 0.75 → 0.95)
+  // (21 Nov, the check after publishing: the channels of the SHARP picture parted by ca — 100–190 px at the corners of a 3344 px frame — made three
+  // coloured copies of every blade (the White's corners: a rainbow noise; the phone: the side jackets in rainbow). Now the sharp picture parts by at
+  // most ~1.5 px, as a real glass's fringe (a blade stays one blade), and the iridescent fringe comes from the smooth quarter copy: its channels part
+  // by ca there and only that difference is laid over — colour halos along the large shapes, no copies of the fine ones)
+  vec2 p0 = 0.5 + d * k, px = d / max(length(d), 1e-4) * e * br * 0.75 / uRes;
+  vec3 cl = vec3(texRT(tA, p0 - px).r, texRT(tA, p0).g, texRT(tA, p0 + px).b);
+  // (the first try parted the smooth copy by the whole ca: blots of colour on the stones; a third of it keeps the fringe along the edges)
+  float cf = ca * 0.3;
+  vec4 b0 = texture2D(tBlur, p0), bR = texture2D(tBlur, 0.5 + d * k * (1.0 - cf)), bB = texture2D(tBlur, 0.5 + d * k * (1.0 + cf));
+  cl = max(cl + 0.8 * vec3(bR.r / max(bR.a, 1e-3) - b0.r / max(b0.a, 1e-3), 0.0, bB.b / max(bB.a, 1e-3) - b0.b / max(b0.a, 1e-3)), 0.0);
   float sp = clamp(uLens.w * 40.0, 0.0, 1.0) * smoothstep(0.0, 0.5, e), ph = 0.12 * sin(uTime * 0.35 + r * 4.0 + an * 2.0);
   vec3 s = vec3(0.0), ws = vec3(0.0);
   for (int i = 0; i < 10; i++) {
