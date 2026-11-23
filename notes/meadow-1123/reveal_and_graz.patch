@@ -1,0 +1,219 @@
+diff -ru wt_v19/src/gl/cloth.ts wt_intro/src/gl/cloth.ts
+--- wt_v19/src/gl/cloth.ts	2026-11-22 06:22:47.730941899 +0000
++++ wt_intro/src/gl/cloth.ts	2026-11-23 11:05:56.502541520 +0000
+@@ -70,6 +70,8 @@
+   uEnvK: { value: THREE.Vector2 };
+   /** (20 Nov) the surroundings' light on the whole piece × this (a plate scene's mode: its field's tone and brightness; home.ts) */
+   uEnvT: { value: THREE.Vector3 };
++  /** (23 Nov, EXPERIMENT) the reflections at grazing: × x on cloth, × z on metal, toward the silhouette by pow(1 − n·v, y); w — the lamps' highlight likewise */
++  uGraz: { value: THREE.Vector4 };
+   /** (20 Nov) the coloured metal satin's lobe: its roughness ×, its direct highlight × (a plate scene: jkenv.ts JK_SATR) */
+   uSatR: { value: THREE.Vector2 };
+   /** (20 Nov) the knit's sheen ×, its specular × (a plate scene: jkenv.ts JK_KNIT — the rib's ridges caught the back lamps at grazing: a silver collar) */
+@@ -133,6 +135,7 @@
+   uInflate: { value: 0 },
+   uEnvK: { value: new THREE.Vector2(1, 1) },
+   uEnvT: { value: new THREE.Vector3(1, 1, 1) },
++  uGraz: { value: new THREE.Vector4(1, 5, 1, 1) },
+   uSatR: { value: new THREE.Vector2(1, 1) },
+   uKnitL: { value: new THREE.Vector2(1, 1) },
+   uLeaL: { value: new THREE.Vector4(1, 1, 1, 0) },
+@@ -853,7 +856,7 @@
+     let vs = '#ifdef VW_FIELDTEX\nuniform highp sampler2D tVwD, tVwN;\n#endif\nvarying float vSleeveDbg;\nattribute float _sleeve;\nattribute float _ao;\nattribute float _aob;\nattribute float _edge;\nattribute vec2 _flex;\nattribute vec4 _plyB;\nattribute vec4 _plyF;\nattribute vec4 _tn;\nvarying float vAO;\nvarying float vAOB;\nvarying float vEdge;\nuniform float uInflate;\n' + GLSL + shader.vertexShader
+       .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\n#ifdef VW_FIELDTEX\n' + FIELD_READ + '\n#else\n' + rebuildNormal + '\n#endif\n')
+       .replace('#include <begin_vertex>', '#include <begin_vertex>\n transformed += cD;\n vSleeveDbg = gSleeve;\n // volume (owner: "more volume"): fuller toward the middle of every panel, edges stay\n transformed += normalize(objectNormal) * uInflate * (1.0 - _edge) * (0.55 + 0.45 * _ao);\n vAO = _ao;\n vAOB = _aob;\n vEdge = _edge;');
+-    let fs = 'varying float vSleeveDbg;\n#ifdef FLIP_SIDED\n#define LIN_INSIDE gl_FrontFacing\n#else\n#define LIN_INSIDE (!gl_FrontFacing)\n#endif\nuniform float uFade;\nuniform vec3 uFadeColor;\nvarying float vAO;\nvarying float vAOB;\nvarying float vEdge;\nuniform vec2 uBox, uBoxX;\nuniform float uBoxZ;\nuniform vec4 uSuede[3];\nuniform vec2 uEnvK;\nuniform vec3 uEnvT;\nuniform vec3 uLook;\nuniform vec2 uSatin;\nuniform vec2 uSatR;\nuniform vec2 uKnitL;\nuniform vec4 uLeaL;\nuniform vec3 uLeaS;\nuniform float uJkCls;\nuniform vec2 uKant;\nuniform vec2 uSatN;\nuniform vec3 uLeaH;\nfloat jkLea = 0.0, jkKn = 0.0, jkSat = 0.0;\nfloat lookM = 0.0;\nuniform float uRelief;\n' + shader.fragmentShader
++    let fs = 'varying float vSleeveDbg;\n#ifdef FLIP_SIDED\n#define LIN_INSIDE gl_FrontFacing\n#else\n#define LIN_INSIDE (!gl_FrontFacing)\n#endif\nuniform float uFade;\nuniform vec3 uFadeColor;\nvarying float vAO;\nvarying float vAOB;\nvarying float vEdge;\nuniform vec2 uBox, uBoxX;\nuniform float uBoxZ;\nuniform vec4 uSuede[3];\nuniform vec2 uEnvK;\nuniform vec4 uGraz;\nuniform vec3 uEnvT;\nuniform vec3 uLook;\nuniform vec2 uSatin;\nuniform vec2 uSatR;\nuniform vec2 uKnitL;\nuniform vec4 uLeaL;\nuniform vec3 uLeaS;\nuniform float uJkCls;\nuniform vec2 uKant;\nuniform vec2 uSatN;\nuniform vec3 uLeaH;\nfloat jkLea = 0.0, jkKn = 0.0, jkSat = 0.0;\nfloat lookM = 0.0;\nuniform float uRelief;\n' + shader.fragmentShader
+       // baked ambient occlusion (scripts/bake-ao.mjs), as a renderer's AO pass:
+       // folds, collar, pockets and the inside lose ambient light and reflections,
+       // and part of the direct light. The inside (back faces) has its own: the hemisphere
+@@ -881,6 +884,7 @@
+             #endif
+           }
+           if (!(LIN_INSIDE)) { reflectedLight.indirectDiffuse *= uEnvK.x; reflectedLight.indirectSpecular *= mix(uEnvK.y, 1.0, metalnessFactor); }
++          if (!(LIN_INSIDE)) { float gz = pow(1.0 - clamp(dot(normal, geometryViewDir), 0.0, 1.0), uGraz.y), gk = mix(uGraz.x, uGraz.z, metalnessFactor); reflectedLight.indirectSpecular *= mix(1.0, gk, gz); reflectedLight.directSpecular *= mix(1.0, uGraz.w, gz); }
+           // (jk1121) the band of the cloth's thickness at an open edge (all its corners vEdge 1): a cut edge of the same cloth, in its own shade, no gloss —
+           // seen edge-on it caught the sky and the lamps at grazing and drew a light line along the hem, the cuffs, the opening and the pocket flaps
+           if (!(LIN_INSIDE) && vEdge > 0.995) { float kn = smoothstep(0.995, 1.0, vEdge); reflectedLight.directDiffuse *= mix(1.0, uKant.x, kn); reflectedLight.indirectDiffuse *= mix(1.0, uKant.x, kn);
+diff -ru wt_v19/src/gl/plate.ts wt_intro/src/gl/plate.ts
+--- wt_v19/src/gl/plate.ts	2026-11-23 11:12:19.535107310 +0000
++++ wt_intro/src/gl/plate.ts	2026-11-23 10:54:34.245202954 +0000
+@@ -353,16 +353,6 @@
+   t.wrapS = t.wrapT = t.wrapR = THREE.RepeatWrapping; t.unpackAlignment = 1; t.needsUpdate = true; return t;
+ };
+ type Data3DTex = THREE.Data3DTexture;
+-/** (23 Nov, the owner: «Млечный Путь двигается… синяя фигня… при сдвиге камеры… почему оно двигается, а одно нет») the sky's glow
+- *  — the light the mist, the sky's gradient, the beams and the ground's lit mist all take (uGlD) — set in his camera's frame and turned
+- *  with the eye each frame (plateViewStep): it stays where it is on the screen as the camera turns, as his sky sheet, its stars and its
+- *  aurora do (FRAG_SKY, atmSky). At rest the eye is his camera: unchanged there. ?glfix=0 — the old, world-fixed glow */
+-const GLD0 = new THREE.Vector3(), HIS_QI = new THREE.Quaternion(), GLD_Q = new THREE.Quaternion(); let GLD_ON = false;
+-const GLD_FIX = !qOff('glfix');
+-export const plateViewStep = (cam: THREE.Camera): void => {
+-  if (!GLD_ON || !GLD_FIX) return;
+-  cam.getWorldQuaternion(GLD_Q).multiply(HIS_QI); FOG_U.uGlD.value.copy(GLD0).applyQuaternion(GLD_Q);
+-};
+ /** set the live layers from web.plate (buildPlate): configs over defaults, ?fog=0 / ?wind=0 / ?mode= */
+ const plateFxInit = (cfg: PlateCfg, his: { position: THREE.Vector3; quaternion: THREE.Quaternion; hfov: number }, aspect: number): void => {
+   const f = cfg.fog ?? {}, w = cfg.wind ?? {}, ky = cfg.key ?? {};
+@@ -371,7 +361,7 @@
+   PLATE_FOG.plate = true; PLATE_FOG.on = !qOff('fog') && (f.density ?? 1) > 0; PLATE_WIND.on = !qOff('wind') && (w.amp ?? 1) > 0; WIND_DIR.a = (Number(/[?&]wdir=(-?[\d.]+)/.exec(QS)?.[1] ?? (w as { dir?: number }).dir ?? 0)) * Math.PI / 180;   // (fb: the sway is the default; ?wind=0 — his frame still)
+   // the sky's glow (and the key light): above his frame's top, in the middle (web.plate.key.glow_el: degrees over his camera's axis)
+   { const el = (ky.glow_el ?? 30) * Math.PI / 180, fw = new THREE.Vector3(0, 0, -1).applyQuaternion(his.quaternion), up = new THREE.Vector3(0, 1, 0).applyQuaternion(his.quaternion);
+-    FOG_U.uGlD.value.copy(fw.multiplyScalar(Math.cos(el)).addScaledVector(up, Math.sin(el)).normalize()); GLD0.copy(FOG_U.uGlD.value); HIS_QI.copy(his.quaternion).invert(); GLD_ON = true; }
++    FOG_U.uGlD.value.copy(fw.multiplyScalar(Math.cos(el)).addScaledVector(up, Math.sin(el)).normalize()); }
+   if (PLATE_FOG.on) {
+     const n = f.near ?? [2.6, 5.0], sc = f.scale ?? [0.16, 0.5, 0.3];
+     FOG_U.uFgP.value.set(f.density ?? 0.3, f.height ?? 0.5, f.ground ?? -1.7, f.far ?? 40);
+diff -ru wt_v19/src/gl/post.ts wt_intro/src/gl/post.ts
+--- wt_v19/src/gl/post.ts	2026-11-23 11:12:41.896139216 +0000
++++ wt_intro/src/gl/post.ts	2026-11-23 11:04:28.183642691 +0000
+@@ -667,6 +667,38 @@
+   return c * uSkH + mix(uSkB.rgb, uSkA.rgb, t) + uSkG.rgb * exp(-uSkG.w * (1.0 - dot(dir, uGlD)));
+ }
+ uniform sampler3D tFgN; uniform float uFgOn, uFgT; uniform vec4 uFgP, uFgR, uFgS, uFgGl; uniform vec3 uFgCol, uFgDrift, uFgH2, uFgO; uniform vec2 uFgH, uFgF; uniform float uFgSm; uniform vec4 uFgB, uAp, uDk; uniform float uAg, uSkF, uJHz; uniform vec2 uFgV, uApG;
++#ifdef REV
++// (23 Nov, the owner: «новое появление сайта… как igloo… неонами по частям… по всем элементам проходит отдельно… по рельефу… по каждому
++// пикселю», PROTOTYPE, ?rev) the reveal runs over the 3D scene itself: each pixel's own point in the world (its depth). A front grows from under
++// the jackets over his relief and every stone and clump in turn (it climbs what stands up: a stone fills from its foot, a blade from its root),
++// its line bent by the mist's slow noise; ahead of it the relief's contours (every 25 cm of height) and a metre's grid glow faintly, on it a
++// neon edge with sparks on the surfaces, behind it the scene with a short afterglow. The sky last, from the horizon up
++uniform vec4 uRev, uRevO, uRevK; uniform vec3 uRevC, uRevB; uniform float uRevL;
++float revHash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
++vec3 revP(float dd, vec2 uv) { vec4 vp = uFgInvP * vec4(uv * 2.0 - 1.0, dd * 2.0 - 1.0, 1.0); return (uFgCamW * vec4(vp.xyz / vp.w, 1.0)).xyz; }
++float revLine(float v, float fw) { return (1.0 - smoothstep(0.0, 1.0, abs(fract(v + 0.5) - 0.5) / max(fw, 1e-5))) * (1.0 - smoothstep(0.12, 0.35, fw)); }
++// (x: the front's distance in bands, < 0 shown, > 0 hidden) the neon's share (edge, scan, sparks, afterglow) and how much is hidden
++float revX(vec3 P, bool sky, vec2 uv) {
++  if (sky) return ((uv.y - 0.36) * 2.6 - (uRevO.w * 3.2 - 0.5)) * 2.5;   // (the sky: a soft line rising from the horizon as uRevO.w goes 0 → 1)
++  float rr = length(P.xz - uRevO.xz), n = texture(tFgN, P * vec3(0.07, 0.16, 0.07) + vec3(0.31, 0.12, 0.57 + uRev.w * 0.015)).r;
++  return (rr + 0.9 * max(P.y - uRevO.y, 0.0) + (n - 0.5) * (1.5 + 0.22 * rr) - uRev.x) / max(uRev.y, 1e-3);
++}
++vec3 revFx(vec3 c, vec3 P, bool sky, vec2 uv, float x, float lk, out float hid) {
++  hid = smoothstep(-0.6, 0.6, x);
++  float edge = exp(-x * x * 2.5) * (sky ? 0.35 : 1.0), pre = 0.0, sp = 0.0;
++  float hy = P.y * 4.0, fh = fwidth(hy); vec2 g = P.xz, fg = fwidth(g);   // (the derivatives outside any branch)
++  if (!sky && x > -0.6 && x < 7.0) {
++    pre = max(revLine(hy, fh), 0.55 * max(revLine(g.x, fg.x), revLine(g.y, fg.y))) * (1.0 - smoothstep(1.0, 7.0, x)) * smoothstep(-0.6, 0.4, x) * lk;
++    vec3 q = P * 6.0, f = fract(q) - 0.5; float h = revHash(floor(q));
++    sp = step(0.86, h) * smoothstep(0.24, 0.0, length(f)) * exp(-(x - 0.4) * (x - 0.4) * 1.2) * (0.55 + 0.45 * sin(uRev.w * 7.0 + h * 61.0));
++  }
++  float ag = (1.0 - hid) * exp(min(x, 0.0) * 0.7) * (sky ? 0.0 : 1.0);
++  float k = edge * uRevK.x + pre * uRevK.y + sp * uRevK.z;
++  vec3 o = mix(c, uRevB, hid);
++  if (uRevL > 0.5) return mix(o, uRevC, clamp(k + 0.1 * ag * uRevK.w, 0.0, 1.0));   // (the light mode: the neon is ink on white — mixed in, not added)
++  return o + uRevC * (k + ag * uRevK.w * 0.25);
++}
++#endif
+ uniform sampler2D tSkl; uniform mat4 uHisPV; uniform vec4 uHz, uHz2, uHz3, uHz4, uHz5; uniform vec2 uLv;
+ vec3 fgRo, fgRd, fgC; float fgH, fgH0, fgK, fgW, fgFar;
+ // (g18) his skyline under this ray (plateGround → tSkl): hzH — the ray's height over his sky / ground line where it meets his frame (frame heights; his
+@@ -990,6 +1022,9 @@
+     // (the upper corners and edges only — the refs' lower band is no darker than his grass, and his near grass stays his frame: B2)
+     if (uLv.x > 0.0) { vec2 vq = (vUv - 0.5) * vec2(min(uRimD.z, 1.9) * 0.82, 1.0) * 1.5; c *= 1.0 - uLv.x * smoothstep(uLv.y, 1.35, length(vq)) * smoothstep(0.35, 0.6, vUv.y); } }
+ #endif
++#if defined(FOG) && defined(REV)
++  if (uRev.z > 0.5) { bool skyR = d >= 0.999999; vec3 Pr = skyR ? vec3(0.0) : revP(d, vUv); float hidR, xr = revX(Pr, skyR, vUv); c = revFx(c, Pr, skyR, vUv, xr, 1.0, hidR); cocB *= 1.0 - hidR; }
++#endif
+   if (uJOn > 0.5) {
+     vec2 ju = (vUv - uJRect.xy) / uJRect.zw;
+     if (ju.x >= 0.0 && ju.y >= 0.0 && ju.x < 1.0 && ju.y < 1.0) {
+@@ -1070,6 +1105,10 @@
+           }
+         }
+ #ifdef FOG
++#ifdef REV
++        if (uRev.z > 0.5) { vec3 Pj = revP(jd, vUv), jl = jc / max(j.a, 1e-4); float hj, xj = revX(Pj, false, vUv); vec3 cj = revFx(jl, Pj, false, vUv, xj, 0.0, hj);   /* (no scan lines on the pieces: their pixels are a branch, no derivatives there) */ float aj = j.a * (1.0 - hj);
++          jc = uRevL > 0.5 ? cj * aj : jl * aj + (cj - mix(jl, uRevB, hj)) * j.a; j.a = aj; }   // (a piece goes as the front climbs it; dark: the neon is light added over its silhouette)
++#endif
+         gJ = vec4(jc, j.a); d = min(d, jd);   // (fb) the pieces go out as their own layer: the lens blurs each layer by its own depth (dofFS), then they are laid together (dofMixFS)
+ #else
+         c = c * (1.0 - j.a) + jc; d = min(d, jd);
+@@ -1331,6 +1370,12 @@
+ type Mat = THREE.ShaderMaterial;
+ 
+ /** air_map.py: the map × curve (tries 1–3) and the table (the fourth: t — base64 half RGB [nb][th][tw]) */
++/** (23 Nov, PROTOTYPE ?rev) the intro's reveal over the 3D scene (taaComposeJFS REV): x front radius (m), y band (m), z on, w time (s);
++ *  uRevO: the front's origin (xyz, under the middle jacket), w the sky's rise 0 → 1; uRevK: the neon's edge, scan, sparks, afterglow */
++export const REV_ON = typeof location !== 'undefined' && /[?&]rev\b/.test(location.search);
++export const REV_U = { uRev: { value: new THREE.Vector4(0, 1, 0, 0) }, uRevO: { value: new THREE.Vector4() }, uRevK: { value: new THREE.Vector4(1.4, 0.55, 2.2, 0.6) },
++  uRevC: { value: new THREE.Vector3(0.35, 0.75, 1.0) }, uRevB: { value: new THREE.Vector3(0.0, 0.0, 0.0) }, uRevL: { value: 0 } };
++
+ export type AirMap = { w: number; h: number; a: number[][][]; dist: number[]; g: number[]; tw?: number; th?: number; nb?: number; l0?: number; l1?: number; t?: string };
+ 
+ /** (18 Nov) the jackets' mirror image's size against the frame (?mirs=); ?mirror=0: no mirror */
+@@ -1694,8 +1739,8 @@
+       const compJ = new THREE.ShaderMaterial({ uniforms: { tHist: { value: null }, tDepth: { value: null }, tJ: { value: null }, tJD: { value: null }, uJRect: { value: new THREE.Vector4() }, uJOn: { value: 0 }, uJPx: { value: new THREE.Vector2() }, uJSharp: { value: /[?&]jsharp=0\b/.test(location.search) ? 0 : JK_FINISH }, uJEdge: { value: /[?&]jedge=0\b/.test(location.search) ? 0 : JK_EDGE },
+           tMir: { value: null }, uMirSh: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] }, uMirOn: { value: 0 }, uMirY: { value: 0 }, uMirK: { value: 0 }, uMirLift: { value: 0 }, uMirTap: { value: 3 }, uMirSat: { value: 0 }, uMirSoft: { value: 0 }, uMirF0: { value: 0 }, tMirSurf: MIR_SURF.tex, uMirUV: { value: new THREE.Matrix3() }, uMirSurf: { value: new THREE.Vector4(0, 0, 1, 0) }, uMirOcc: { value: -1 }, uMirVP: { value: new THREE.Matrix4() }, uMirInvP: { value: new THREE.Matrix4() }, uMirCamW: { value: new THREE.Matrix4() }, uMirTexel: { value: new THREE.Vector2() },
+           uAirPre: su.uAirPre, uAirT: su.uAirT, uAirNB: su.uAirNB, uAirSigma: su.uAirSigma, uAirL0: su.uAirL0, uAirL1: su.uAirL1, tAir3: su.tAir3, uAirView: su.uAirView, uAirInvProj: su.uAirInvProj, uAirTan: su.uAirTan, uAirW: su.uAirW, uAirFog: su.uAirFog,
+-          ...JTONE_U, ...(PLATE_FOG.plate ? { ...FOG_U, ...GRADE_U } : {}) },
+-        vertexShader: VS, fragmentShader: (PLATE_FOG.plate ? '#define FOG\n' : '') + (/[?&]dbg=[^&]*mir/.test(location.search) ? '#define MIR_DBG\n' : '') + taaComposeJFS, depthTest: true, depthFunc: THREE.AlwaysDepth, depthWrite: true });
++          ...JTONE_U, ...(PLATE_FOG.plate ? { ...FOG_U, ...GRADE_U } : {}), ...(REV_ON ? REV_U : {}) },
++        vertexShader: VS, fragmentShader: (REV_ON ? '#define REV\n' : '') + (PLATE_FOG.plate ? '#define FOG\n' : '') + (/[?&]dbg=[^&]*mir/.test(location.search) ? '#define MIR_DBG\n' : '') + taaComposeJFS, depthTest: true, depthFunc: THREE.AlwaysDepth, depthWrite: true });
+       this.taa = { f: [mkF(), mkF(still)], h: [mkH(), mkH()], ca, i: 0, k: 0, have: false, res, comp, compJ, air, prevVP: new THREE.Matrix4(), prevInvJ: new THREE.Matrix4(),
+         prevWorld: new THREE.Matrix4(), projSave: new THREE.Matrix4(), projInvSave: new THREE.Matrix4(), scale, cut: this.taa?.cut };
+       if (!this.taaQuad) { this.taaQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), res); this.taaQuad.frustumCulled = false; this.taaScene.add(this.taaQuad); }
+Only in wt_intro/src/gl: reveal.ts
+diff -ru wt_v19/src/main.ts wt_intro/src/main.ts
+--- wt_v19/src/main.ts	2026-11-23 11:12:41.897112984 +0000
++++ wt_intro/src/main.ts	2026-11-23 11:06:26.480302256 +0000
+@@ -8,7 +8,7 @@
+ import { Ladder, DPR_STEPS, PACES } from './core/ladder';
+ import { mountPlateModes, showPlateModes } from './ui/platemodes';
+ import { TEMPLE_PLATE } from './gl/temple';
+-import { plateParts, plateGust, plateViewStep, PLATE_MODE_LATE, DOF } from './gl/plate';
++import { plateParts, plateGust, PLATE_MODE_LATE, DOF } from './gl/plate';
+ import { soundInit, soundSection, soundHover, soundClick, soundGo, soundWind } from './core/sound';
+ import { mountSoundButton } from './ui/soundbtn';
+ import { LENS_UI, mountLensPanel } from './ui/lenspanel';
+@@ -27,7 +27,8 @@
+ import { TEMPLE_VIEWS, TEMPLE_OWN_LIGHT, TEMPLE_BETA, TEMPLE_FOG, TEMPLE_AIR2, TEMPLE_AIR_FULL, TEMPLE_AIR_SIGMA, SUN_U, SUN_LEAF, TEMPLE_MIRROR, TEMPLE_TAA, TEMPLE_PACKED, TEMPLE_LOOK } from './gl/temple';
+ import { TAA_CFG } from './gl/lod';
+ import { Product } from './gl/product';
+-import { Post } from './gl/post';
++import { Post, REV_ON } from './gl/post';
++import { revealAt } from './gl/reveal';
+ import { passMark, passResult, passT } from './gl/passtime';
+ import { decode, decodeTick } from './ui/decode';
+ import { Probe, beta } from './beta/probe';
+@@ -695,7 +696,6 @@
+     if (TEMPLE_AIR2 && home.hisCamera && !airSet && !RAW_DBG) { post.setAir(TEMPLE_AIR2, home.hisCamera, TEMPLE_AIR_SIGMA, TEMPLE_FOG?.rgb ?? null, TEMPLE_AIR_FULL ? [-1, 0] : AIR_W); airSet = true; }
+     passMark(r, null);
+     const taaS = __BETA__ && beta.taa >= 0 ? beta.taa : PLATE_TAA ?? FOREST_TAA;
+-    if (TEMPLE_PLATE) { home.camera.updateMatrixWorld(); plateViewStep(home.camera); }   // (23 Nov) the sky's glow turned with the eye: it stays on the screen (plate.ts)
+     if (taaS > 0 && home.hisCamera) post.renderHomeTaa(r, home.scene, home.camera, home.onTop, taaS);
+     else { post.taaOff(); post.renderTo(r, post.rtA, home.scene, home.camera); passMark(r, 'scene (no taa)'); }
+     if (__BETA__ && beta.inval) post.drop(r, post.rtA);
+@@ -956,6 +956,7 @@
+   const fast = QA && new URLSearchParams(location.search).has('fast');
+   if (!fast) { logo($('.lg1'), 0.4); logo($('.lg2'), 3.4); }
+   const cover = $('#cover');
++  if (REV_ON) cover.style.display = 'none';   // (PROTOTYPE ?rev: the scene itself comes out of the dark — the cover's fade would hide it)
+   later(fast ? 0 : 3.25, () => { cover.style.transition = `opacity ${fast ? 0.2 : 2.6}s cubic-bezier(.37,0,.63,1)`; cover.style.opacity = '0'; });
+   later(fast ? 0.3 : 6.2, () => cover.remove());
+   home.playIntro(fast ? 0 : 3.25, fast ? 0.6 : 10);
+@@ -966,6 +967,7 @@
+   mountSoundButton();   // (21 Nov: the music and effects on/off — core/sound.ts)
+   if (__BETA__ && TEMPLE_PLATE) mountLensPanel(post.single.uniforms as unknown as Parameters<typeof mountLensPanel>[0]);
+   if (__BETA__ && TEMPLE_PLATE) { mountScenePanel(); mountGrassPanel(); }   // (22 Nov: the owner's scene console — lines, shadow, pollen — beta only)   // (22 Nov: the owner's lens console, beta only)
++  if (QA && REV_ON) (window as unknown as { __rev: unknown }).__rev = revealAt;   // (qa ?rev: the capture sets the reveal's moment, PROTOTYPE)
+   if (QA) (window as unknown as { __lensU: unknown }).__lensU = post.single.uniforms;   // (qa: the lens's numbers, as the beta's console moves them)
+   // (v14, the v13 check: 43 → 45 programs after the page showed) a plate scene on a computer: the jacket pages' programs are made behind
+   // the loader — nothing is compiled once the page is seen (phones make them when a jacket is first opened, as before: ОШИБКИ п.92)
+@@ -1161,7 +1163,8 @@
+ };
+ // (the panel's «draws / tris» were the last pass's — the screen quad: 1 and 2; now the whole frame's)
+ if (probe) renderer.info.autoReset = false;
+-time.onTick((t, dt) => { probe?.begin(); update(t, dt); if (TEMPLE_PLATE) showPlateModes(mode === 'home'); });
++let revT0 = -1;
++time.onTick((t, dt) => { probe?.begin(); if (REV_ON && !QA && (mode === 'intro' || mode === 'home')) { if (revT0 < 0) revT0 = t; revealAt(t - revT0); } update(t, dt); if (TEMPLE_PLATE) showPlateModes(mode === 'home'); });
+ time.onDraw(() => {
+   adapt();
+   ladder(performance.now());
+@@ -1209,6 +1212,8 @@
+     depthPrepass: (on: boolean) => { for (const g of [...(home?.garments ?? []), ...products.map((p) => p.garment)]) g.setDepthPrepass(on); },
+     cloth: (i: number) => { const c = products[i].garment.cloth; return { bones: c.u.uBoneO.value.map((o) => [o.x, o.y, o.z]), touch: c.touchState }; },
+     /** the same for a piece on the home */
++    /** (23 Nov, EXPERIMENT) a home piece's cloth uniforms (uGraz, uEnvK…) */
++    homeU: (i: number) => home.garments[i].cloth.u,
+     homeCloth: (i: number) => { const c = home.garments[i].cloth; return { bones: c.u.uBoneO.value.map((o) => [o.x, o.y, o.z]) }; },
+     /** what is under a screen point on the current product (part review) */
+     pickAt: (x: number, y: number) => {
